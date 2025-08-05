@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useEffect, useRef, useState } from 'react';
 import { fetchProducts } from '@/constants/api';
+import { useBasket } from '@/components/BasketContext';
 
 type Product = {
   id: number;
@@ -19,8 +20,8 @@ export default function HomeScreen() {
   const [scaleValue] = useState(new Animated.Value(1));
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [imageLoading, setImageLoading] = useState(false);
   const searchRef = useRef<TextInput>(null);
+  const { addToBasket, deleteFromBasket, basket } = useBasket();
 
   useEffect(() => {
     setLoading(true);
@@ -82,8 +83,6 @@ export default function HomeScreen() {
                       style={styles.productImage}
                       contentFit="contain"
                       transition={200}
-                      onLoadStart={() => setImageLoading(true)}
-                      onLoadEnd={() => setImageLoading(false)}
                     />
                   </View>
                   <ThemedText type="subtitle" style={styles.productTitle} numberOfLines={2}>
@@ -93,9 +92,10 @@ export default function HomeScreen() {
                     {product.category}
                   </ThemedText>
                   <ThemedText type="default" style={styles.productPrice}>
-                    ${product.price.toFixed(2)}
+                    ${product.price.toFixed(0)}
                   </ThemedText>
                   <Pressable
+                    onPress={() => addToBasket(product)}
                     style={({ pressed }) => [
                       styles.addButton,
                       pressed && styles.buttonPressed
@@ -138,7 +138,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    backgroundColor: '#FFF',
     fontSize: 16,
   },
   productsContainer: {
