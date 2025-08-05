@@ -6,6 +6,9 @@ import { ThemedView } from '@/components/ThemedView';
 import { useEffect, useRef, useState } from 'react';
 import { fetchProducts } from '@/constants/api';
 import { useBasket } from '@/components/BasketContext';
+import { useThemeColor } from '@/hooks/useThemeColor';
+import { MaterialIcons } from '@expo/vector-icons';
+import { styles } from '@/assets/styles/HomeScreen';
 
 type Product = {
   id: number;
@@ -21,7 +24,13 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef<TextInput>(null);
-  const { addToBasket, deleteFromBasket, basket } = useBasket();
+  const { addToBasket } = useBasket();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 4;
+
+
+  const textColor = useThemeColor({}, 'text');
+  const placeholderColor = useThemeColor({}, 'text');
 
   useEffect(() => {
     setLoading(true);
@@ -37,6 +46,14 @@ export default function HomeScreen() {
     product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     product.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
 
   return (
     <ParallaxScrollView
@@ -61,21 +78,21 @@ export default function HomeScreen() {
             <TextInput
               ref={searchRef}
               placeholder="Search products..."
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: textColor }]}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholderTextColor="#888"
+              placeholderTextColor={placeholderColor}
             />
           </ThemedView>
           <ThemedView style={styles.productsContainer}>
-            {filteredProducts.length === 0 ? (
+            {paginatedProducts.length === 0 ? (
               <ThemedView style={styles.emptyContainer}>
                 <ThemedText type="subtitle" style={styles.emptyText}>
                   No products found
                 </ThemedText>
               </ThemedView>
             ) : (
-              filteredProducts.map((product: Product) => (
+              paginatedProducts.map((product: Product) => (
                 <ThemedView key={product.id} style={styles.productCard}>
                   <View style={styles.imageContainer}>
                     <Image
@@ -107,7 +124,68 @@ export default function HomeScreen() {
               ))
             )}
           </ThemedView>
-          <Button onPress={() => searchRef.current?.focus()} title="Search products" />
+          <Pressable
+            style={({ pressed }) => [
+              styles.searchButton,
+            ]}
+            onPress={() => searchRef.current?.focus()}
+          >
+            <MaterialIcons name="search" size={18} color="#c4a3a1ff" />
+            <ThemedText style={styles.searchButtonText}>
+              Search
+            </ThemedText>
+          </Pressable>
+          <ThemedView
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 12,
+              marginVertical: 20,
+            }}
+          >
+            <Pressable
+              onPress={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              style={({ pressed }) => ({
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 30,
+                backgroundColor: currentPage === 1
+                  ? '#e0e0e0'
+                  : pressed
+                    ? '#ffd600'
+                    : '#fcd200',
+                opacity: currentPage === 1 ? 0.5 : 1,
+                elevation: pressed ? 1 : 3,
+              })}
+            >
+              <Text style={{ fontWeight: 'bold', color: '#333' }}>◀ Prev</Text>
+            </Pressable>
+
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#444' }}>
+              Page {currentPage} of {totalPages}
+            </Text>
+
+            <Pressable
+              onPress={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              style={({ pressed }) => ({
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 30,
+                backgroundColor: currentPage === totalPages
+                  ? '#e0e0e0'
+                  : pressed
+                    ? '#ffd600'
+                    : '#fcd200',
+                opacity: currentPage === totalPages ? 0.5 : 1,
+                elevation: pressed ? 1 : 3,
+              })}
+            >
+              <Text style={{ fontWeight: 'bold', color: '#333' }}>Next ▶</Text>
+            </Pressable>
+          </ThemedView>
         </View>
       )}
     </ParallaxScrollView>
@@ -115,135 +193,3 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  reactLogo: {
-    height: "100%",
-    width: "100%",
-  },
-  searchContainer: {
-    marginBottom: 20,
-    width: '100%',
-  },
-  searchInput: {
-    width: '100%',
-    height: 50,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    fontSize: 16,
-  },
-  productsContainer: {
-    paddingTop: 8,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    width: '100%',
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  productCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    width: '48%',
-    height: 300,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-  },
-  imageContainer: {
-    width: '100%',
-    height: 100,
-    marginBottom: 12,
-    borderRadius: 8,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  productTitle: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  productCategory: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 8,
-    textAlign: 'center',
-    textTransform: 'capitalize',
-  },
-  productPrice: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    color: '#2A9D8F',
-    textAlign: 'center',
-  },
-  addButton: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#fcd200',
-    borderRadius: 6,
-    width: 130,
-    height: 48,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonPressed: {
-    backgroundColor: '#f7ca00',
-  },
-  buttonText: {
-    fontSize: 14,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-});
