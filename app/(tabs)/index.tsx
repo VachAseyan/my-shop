@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import { StyleSheet, TextInput, ActivityIndicator, View, Button, Animated, Pressable, Text } from 'react-native';
+import { StyleSheet, TextInput, ActivityIndicator, View, Button, Animated, Pressable, Text, NativeSyntheticEvent, NativeScrollEvent, ScrollView } from 'react-native';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchProducts } from '@/constants/api';
 import { useBasket } from '@/components/BasketContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -20,26 +20,28 @@ type Product = {
 
 export default function HomeScreen() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [visibleProducts, setVisibleProducts] = useState<Product[]>([]);
   const [scaleValue] = useState(new Animated.Value(1));
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef<TextInput>(null);
   const { addToBasket } = useBasket();
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
-
+  const [page, setPage] = useState(1);
+  const productsPerPage = 4;
 
   const textColor = useThemeColor({}, 'text');
   const placeholderColor = useThemeColor({}, 'text');
 
   useEffect(() => {
-    setLoading(true);
-    const timeOutId = setTimeout(() =>
-      fetchProducts().then(res => {
-        setProducts(res);
-        setLoading(false);
-      }), 3000);
-    return () => clearTimeout(timeOutId);
+    const loadInitialProducts = async () => {
+      setLoading(true);
+      const res = await fetchProducts();
+      setProducts(res);
+      setVisibleProducts(res.slice(0, productsPerPage));
+      setLoading(false);
+    };
+
+    loadInitialProducts();
   }, []);
 
   const filteredProducts = products.filter(product =>
@@ -47,149 +49,127 @@ export default function HomeScreen() {
     product.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const loadMoreProducts = useCallback(() => {
+    const nextPage = page + 1;
+    const nextProducts = products.slice(0, nextPage * productsPerPage);
 
-  const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    if (nextProducts.length > visibleProducts.length) {
+      setVisibleProducts(nextProducts);
+      setPage(nextPage);
+    }
+  }, [page, visibleProducts, products]);
+
+  useEffect(() => {
+    setVisibleProducts(filteredProducts.slice(0, page * productsPerPage));
+    setPage(1);
+  }, [searchQuery]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 50;
+    const isNearBottom = layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - paddingToBottom;
+
+    if (isNearBottom && !loading && visibleProducts.length < filteredProducts.length) {
+      loadMoreProducts();
+    }
+  }, [loading, visibleProducts, filteredProducts]);
+
+  const renderProductItem = ({ item }: { item: Product }) => (
+    <ThemedView key={item.id} style={styles.productCard}>
+      <View style={styles.imageContainer}>
+        <Image
+          source={{ uri: item.image }}
+          style={styles.productImage}
+          contentFit="contain"
+          transition={200}
+        />
+      </View>
+      <ThemedText type="subtitle" style={styles.productTitle} numberOfLines={2}>
+        {item.title}
+      </ThemedText>
+      <ThemedText type="default" style={styles.productCategory}>
+        {item.category}
+      </ThemedText>
+      <ThemedText type="default" style={styles.productPrice}>
+        ${item.price.toFixed(0)}
+      </ThemedText>
+      <Pressable
+        onPress={() => addToBasket(item)}
+        style={({ pressed }) => [
+          styles.addButton,
+          pressed && styles.buttonPressed
+        ]}
+      >
+        <ThemedText style={styles.buttonText}>Add to Basket</ThemedText>
+      </Pressable>
+    </ThemedView>
   );
-
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/homeBackgroundImage.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome Our Shop</ThemedText>
-      </ThemedView>
-      {loading ? (
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#d0dce0ff" />
-          <ThemedText style={styles.loadingText}>Loading products...</ThemedText>
+    <ScrollView
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+    >
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+        headerImage={
+          <Image
+            source={require('@/assets/images/homeBackgroundImage.png')}
+            style={styles.reactLogo}
+          />
+        }
+      >
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Welcome Our Shop</ThemedText>
         </ThemedView>
-      ) : (
-        <View>
-          <ThemedView style={styles.searchContainer}>
-            <TextInput
-              ref={searchRef}
-              placeholder="Search products..."
-              style={[styles.searchInput, { color: textColor }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor={placeholderColor}
-            />
+
+        {loading && products.length === 0 ? (
+          <ThemedView style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#d0dce0ff" />
+            <ThemedText style={styles.loadingText}>Loading products...</ThemedText>
           </ThemedView>
-          <ThemedView style={styles.productsContainer}>
-            {paginatedProducts.length === 0 ? (
-              <ThemedView style={styles.emptyContainer}>
-                <ThemedText type="subtitle" style={styles.emptyText}>
-                  No products found
-                </ThemedText>
-              </ThemedView>
-            ) : (
-              paginatedProducts.map((product: Product) => (
-                <ThemedView key={product.id} style={styles.productCard}>
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={{ uri: product.image }}
-                      style={styles.productImage}
-                      contentFit="contain"
-                      transition={200}
-                    />
-                  </View>
-                  <ThemedText type="subtitle" style={styles.productTitle} numberOfLines={2}>
-                    {product.title}
+        ) : (
+          <View>
+            <ThemedView style={styles.searchContainer}>
+              <TextInput
+                ref={searchRef}
+                placeholder="Search products..."
+                style={[styles.searchInput, { color: textColor }]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor={placeholderColor}
+              />
+            </ThemedView>
+
+            <View style={styles.productsContainer}>
+              {filteredProducts.length === 0 ? (
+                <ThemedView style={styles.emptyContainer}>
+                  <ThemedText type="subtitle" style={styles.emptyText}>
+                    No products found
                   </ThemedText>
-                  <ThemedText type="default" style={styles.productCategory}>
-                    {product.category}
-                  </ThemedText>
-                  <ThemedText type="default" style={styles.productPrice}>
-                    ${product.price.toFixed(0)}
-                  </ThemedText>
-                  <Pressable
-                    onPress={() => addToBasket(product)}
-                    style={({ pressed }) => [
-                      styles.addButton,
-                      pressed && styles.buttonPressed
-                    ]}
-                  >
-                    <ThemedText style={styles.buttonText}>Add to Basket</ThemedText>
-                  </Pressable>
                 </ThemedView>
-              ))
+              ) : (
+                visibleProducts.map((product) => renderProductItem({ item: product }))
+              )}
+            </View>
+
+            {visibleProducts.length < filteredProducts.length && (
+              <ActivityIndicator size="small" style={{ marginVertical: 20 }} />
             )}
-          </ThemedView>
-          <Pressable
-            style={({ pressed }) => [
-              styles.searchButton,
-            ]}
-            onPress={() => searchRef.current?.focus()}
-          >
-            <MaterialIcons name="search" size={18} color="#c4a3a1ff" />
-            <ThemedText style={styles.searchButtonText}>
-              Search
-            </ThemedText>
-          </Pressable>
-          <ThemedView
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 12,
-              marginVertical: 20,
-            }}
-          >
-            <Pressable
-              onPress={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              style={({ pressed }) => ({
-                paddingVertical: 10,
-                paddingHorizontal: 16,
-                borderRadius: 30,
-                backgroundColor: currentPage === 1
-                  ? '#e0e0e0'
-                  : pressed
-                    ? '#ffd600'
-                    : '#fcd200',
-                opacity: currentPage === 1 ? 0.5 : 1,
-                elevation: pressed ? 1 : 3,
-              })}
-            >
-              <Text style={{ fontWeight: 'bold', color: '#333' }}>◀ Prev</Text>
-            </Pressable>
-
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#444' }}>
-              Page {currentPage} of {totalPages}
-            </Text>
 
             <Pressable
-              onPress={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              style={({ pressed }) => ({
-                paddingVertical: 10,
-                paddingHorizontal: 16,
-                borderRadius: 30,
-                backgroundColor: currentPage === totalPages
-                  ? '#e0e0e0'
-                  : pressed
-                    ? '#ffd600'
-                    : '#fcd200',
-                opacity: currentPage === totalPages ? 0.5 : 1,
-                elevation: pressed ? 1 : 3,
-              })}
+              style={styles.searchButton}
+              onPress={() => searchRef.current?.focus()}
             >
-              <Text style={{ fontWeight: 'bold', color: '#333' }}>Next ▶</Text>
+              <MaterialIcons name="search" size={18} color="#c4a3a1ff" />
+              <ThemedText style={styles.searchButtonText}>
+                Search
+              </ThemedText>
             </Pressable>
-          </ThemedView>
-        </View>
-      )}
-    </ParallaxScrollView>
-
+          </View>
+        )}
+      </ParallaxScrollView>
+    </ScrollView>
   );
 }
-
